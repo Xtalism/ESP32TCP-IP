@@ -1,6 +1,6 @@
-#include <Arduino.h>
-#include <FS.h>
 #include <WiFi.h>
+#include <FS.h>
+#include <WebServer.h>
 
 const char *ssid = "ESP32-AP";
 const char *password = "manuel123";
@@ -8,8 +8,23 @@ const char *password = "manuel123";
 const char *serverIP = "192.168.4.1";
 const uint16_t serverPort = 80;
 
-// Forward declaration of the sendToServer function
+WebServer server(80);
+
 void sendToServer(String message);
+
+void handlePost()
+{
+  if (server.method() == HTTP_POST)
+  {
+    String message = server.arg("plain");
+    Serial.println("Received message: " + message);
+    server.send(200, "text/plain", "Message received: " + message);
+  }
+  else
+  {
+    server.send(405, "text/plain", "Method Not Allowed");
+  }
+}
 
 void setup()
 {
@@ -22,19 +37,17 @@ void setup()
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
-  Serial.printf("MAC address = %s\n", WiFi.softAPmacAddress().c_str());
+  Serial.printf("MAC address = %s\n", WiFi.macAddress().c_str());
 
-  // while (WL_CONNECTED == WiFi.status())
-  // {
-  //   long rssi = WiFi.RSSI();
-  //   Serial.print("Signal strength (RSSI): ");
-  //   Serial.println(rssi);
-  //   delay(3000);
-  // }
+  server.on("/", HTTP_POST, handlePost);
+  server.begin();
+  Serial.println("HTTP server started");
 }
 
 void loop()
 {
+  server.handleClient();
+
   if (Serial.available())
   {
     String message = Serial.readStringUntil('\n');
@@ -48,7 +61,7 @@ void sendToServer(String message)
 
   if (client.connect(serverIP, serverPort))
   {
-    Serial.println("Message Sent");
+    Serial.println("Connected to server");
 
     String postRequest = "POST / HTTP/1.1\r\n";
     postRequest += "Host: " + String(serverIP) + "\r\n";
@@ -59,13 +72,12 @@ void sendToServer(String message)
 
     client.print(postRequest);
 
-    while (client.available())
+    while (client.connected())
     {
       if (client.available())
       {
         String response = client.readStringUntil('\n');
-        // Serial.println(response);
-        Serial.println("Sent: " + message);
+        Serial.println("Response: " + response);
       }
     }
     client.stop();
